@@ -166,8 +166,13 @@ def read_imu() -> Dict[str, int]:
     gx, gy, gz = 0, 0, 0
 
     with SMBus(1) as bus:
-        # TODO: I2C로 MPU6050에서 6축 값 읽기
-        pass
+        ax = _read_word(bus, Mpu6050Reg.ADDR, Mpu6050Reg.ACCEL_XOUT_H)
+        ay = _read_word(bus, Mpu6050Reg.ADDR, Mpu6050Reg.ACCEL_XOUT_H + 2)
+        az = _read_word(bus, Mpu6050Reg.ADDR, Mpu6050Reg.ACCEL_XOUT_H + 4)
+        gx = _read_word(bus, Mpu6050Reg.ADDR, Mpu6050Reg.GYRO_XOUT_H)
+        gy = _read_word(bus, Mpu6050Reg.ADDR, Mpu6050Reg.GYRO_XOUT_H + 2)
+        gz = _read_word(bus, Mpu6050Reg.ADDR, Mpu6050Reg.GYRO_XOUT_H + 4)
+
 
     return {"ax": ax, "ay": ay, "az": az, "gx": gx, "gy": gy, "gz": gz}
 
@@ -180,7 +185,12 @@ def wake_device() -> Tuple[int, int]:
     with SMBus(1) as bus:
         # TODO: PWR_MGMT_1 레지스터 읽고, sleep bit 토글
         before = bus.read_byte_data(Mpu6050Reg.ADDR, Mpu6050Reg.PWR_MGMT_1)
-        verify = "not implemented"
+        # verify = "not implemented"
+        verify = before ^ (1 << 6)
+        bus.write_byte_data(Mpu6050Reg.ADDR, Mpu6050Reg.PWR_MGMT_1, verify)
+        after = bus.read_byte_data(Mpu6050Reg.ADDR, Mpu6050Reg.PWR_MGMT_1)
+        if after != verify:
+            pass
 
     return before, verify
 
@@ -194,7 +204,12 @@ def rfid_poll_once() -> Tuple[bool, Optional[bytes]]:
     r = Rc522SPI()
     try:
         # TODO: REQA 전송 후 ATQA 수신
-        return False, None
+        # return True, bytes
+        atqa = r.transceive_7bit(0x26)
+        if len(atqa) == 2:
+            return True, atqa
+        else:
+            return False, None
     finally:
         r.close()
 
@@ -208,7 +223,11 @@ def rfid_set_antenna(on: bool) -> int:
     r = Rc522SPI()
     try:
         # TODO: 안테나 on/off 설정
-        return 0
+        r.antenna_on(on)
+        tx_control = r.read_reg(Rc522Reg.TX_CONTROL)
+        return tx_control
+
+        # return 0
     finally:
         r.close()
 
@@ -223,8 +242,8 @@ def ssh_get_arch() -> str:
     archs = ("aarch64", "arm64")
 
     # TODO: user_host, cmd 채우기
-    user_host = ""
-    cmd = ""
+    user_host = "intelai@11.11.11.11"
+    cmd = "uname -m"
 
     if not user_host or not user_host.strip():
         raise ValueError("user_host를 반드시 채우세요.")
